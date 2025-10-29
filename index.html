@@ -85,9 +85,9 @@
         
         <nav class="flex justify-end items-center mb-10 h-10">
              <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-500/10 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <svg id="theme-icon-light" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                <svg id="theme-icon-dark" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
-            </button>
+                 <svg id="theme-icon-light" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                 <svg id="theme-icon-dark" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+             </button>
         </nav>
 
         <main class="glass-card rounded-2xl p-6 md:p-8">
@@ -135,6 +135,7 @@
                             </div>
                         </div>
                         <h3 id="resultTitle" class="text-xl font-bold mt-4 text-center"></h3>
+                        <p id="resultSummary" class="text-center text-[var(--text-secondary)] -mt-1 mb-2 px-4"></p>
                     </div>
 
                     <div class="md:col-span-3">
@@ -170,6 +171,7 @@
         const resultsDiv = document.getElementById('results');
         const resultTitle = document.getElementById('resultTitle');
         const resultScore = document.getElementById('resultScore').querySelector('span:first-child');
+        const resultSummary = document.getElementById('resultSummary'); // NEW: Get the summary element
         const riskDialValue = document.getElementById('riskDialValue');
         const flagsContainer = document.getElementById('flagsContainer');
         const noFlags = document.getElementById('noFlags');
@@ -206,7 +208,6 @@
                 { regex: /(immediate|within 24 hours|account will be closed|act now|expir\w+\s+soon)/ig, weight: 20, explanation: "Uses threatening language or strict deadlines to rush you into a decision." },
                 { regex: /^(dear customer|dear user|valued member|dear account holder|greetings)/im, weight: 10, explanation: "Uses a generic greeting. Legitimate companies will often address you by name." },
                 { regex: /(invoice|receipt|document|scan|pdf|zip)\s+is\s+attached|download the attachment/ig, weight: 25, explanation: "Mentions an unexpected attachment, which could contain malware." },
-                { regex: /(grammatical errors|bad spelling|unprofessional tone)/ig, weight: 15, explanation: "Contains noticeable spelling or grammar mistakes, a common sign of phishing." }
             ],
             links: [
                 { weight: 35, explanation: "A link's displayed text does not match its actual destination, hiding a malicious site.",
@@ -217,8 +218,11 @@
                             try {
                                 const url = new URL(match[1]);
                                 const text = match[2].replace(/<[^>]*>/g, '').trim();
-                                const textAsUrl = new URL(text.startsWith('http') ? text : `http://${text}`);
-                                if (url.hostname !== textAsUrl.hostname) return true;
+                                // Only check if the link text looks like a URL itself
+                                if (text.startsWith('http') || text.startsWith('www.')) {
+                                    const textAsUrl = new URL(text.startsWith('http') ? text : `http://${text}`);
+                                    if (url.hostname !== textAsUrl.hostname) return true;
+                                }
                             } catch (e) { /* ignore invalid urls in text */ }
                         }
                         return false;
@@ -237,8 +241,9 @@
             // Check for spelling mistakes
             const spellingMistakes = (emailSubjectEl.value + ' ' + emailContentEl.value).match(/temporarilly|congradulations|securty|verfy/gi);
             if(spellingMistakes && spellingMistakes.length > 0) {
-                 totalScore += 15;
-                 flagsFound.push({ category: 'content', message: 'Contains noticeable spelling or grammar mistakes, a common sign of phishing.' });
+                 // MODIFIED: Store weight along with the flag
+                totalScore += 15;
+                flagsFound.push({ category: 'content', message: 'Contains noticeable spelling or grammar mistakes, a common sign of phishing.', weight: 15 });
             }
 
             for (const category in PHISHING_CHECKS) {
@@ -251,7 +256,8 @@
                          // Avoid adding duplicate flag messages
                         if (!flagsFound.some(f => f.message === check.explanation)) {
                             totalScore += check.weight;
-                            flagsFound.push({ category, message: check.explanation });
+                            // MODIFIED: Store the weight along with the flag details
+                            flagsFound.push({ category, message: check.explanation, weight: check.weight });
                         }
                     }
                 });
@@ -276,6 +282,17 @@
             resultTitle.textContent = status;
             resultTitle.className = `text-xl font-bold mt-4 text-center ${textColorClass}`;
             
+            // NEW: Generate and display the summary of why it was flagged
+            resultSummary.innerHTML = ''; // Clear previous summary
+            if (flags.length > 0) {
+                const sortedFlags = [...flags].sort((a, b) => b.weight - a.weight);
+                const primaryCategory = sortedFlags[0].category.charAt(0).toUpperCase() + sortedFlags[0].category.slice(1);
+                let summaryText = `The analysis raised concerns regarding the <b>Email ${primaryCategory}</b>.`;
+                resultSummary.innerHTML = summaryText;
+            } else {
+                resultSummary.textContent = "No significant threats were detected."
+            }
+            
             let currentScore = 0;
             const interval = setInterval(() => {
                 currentScore++;
@@ -292,7 +309,8 @@
             if (flags.length > 0) {
                 noFlags.classList.add('hidden');
                 flags.forEach((flag, index) => {
-                    const flagEl = createListItem(ICONS[flag.category], `${flag.category.charAt(0).toUpperCase() + flag.category.slice(1)} Warning`, flag.message, index);
+                    // MODIFIED: Pass the flag's weight to the list item creator
+                    const flagEl = createListItem(ICONS[flag.category], `${flag.category.charAt(0).toUpperCase() + flag.category.slice(1)} Warning`, flag.message, index, flag.weight);
                     flagsContainer.appendChild(flagEl);
                 });
             } else {
@@ -329,17 +347,20 @@
             }
         }
         
-        function createListItem(icon, title, text, index) {
+        // MODIFIED: Function updated to accept a 'weight' and display it as a badge
+        function createListItem(icon, title, text, index, weight) {
             const el = document.createElement('div');
-            // *** THE FIX IS HERE ***
-            // This line now includes 'flag-item' to trigger the CSS animation
             el.className = 'flex items-start gap-3 flag-item'; 
-            el.style.opacity = 0; // Start invisible for the animation
+            el.style.opacity = 0;
             el.style.animationDelay = `${index * 100}ms`;
+
+            // NEW: Create a badge to show the points, but only if a weight is provided
+            const weightBadge = weight ? `<span class="ml-2 text-xs font-mono py-0.5 px-1.5 rounded-md bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300">+${weight} pts</span>` : '';
+
             el.innerHTML = `
                 <div class="flex-shrink-0 mt-1">${icon}</div>
                 <div>
-                    <p class="font-semibold text-[var(--text-primary)]">${title}</p>
+                    <p class="font-semibold text-[var(--text-primary)]">${title}${weightBadge}</p>
                     <p class="text-sm text-[var(--text-secondary)]">${text}</p>
                 </div>`;
             return el;
@@ -413,4 +434,3 @@
     </script>
 </body>
 </html>
-
